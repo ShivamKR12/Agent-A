@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from src.agent_a.core import AgentA
 
 class TestAgentA(unittest.TestCase):
@@ -10,7 +11,8 @@ class TestAgentA(unittest.TestCase):
         self.assertIsNotNone(self.agent.decision_maker)
         self.assertIsNotNone(self.agent.modularity)
 
-    def test_run(self):
+    @patch('builtins.input', side_effect=['exit'])
+    def test_run(self, mock_input):
         try:
             self.agent.run()
         except Exception as e:

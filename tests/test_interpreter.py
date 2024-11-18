@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from src.agent_a.interpreter import InteractiveInterpreter
 
 class TestInteractiveInterpreter(unittest.TestCase):
@@ -8,7 +9,8 @@ class TestInteractiveInterpreter(unittest.TestCase):
     def test_initialization(self):
         self.assertIsNotNone(self.interpreter)
 
-    def test_start(self):
+    @patch('builtins.input', side_effect=['exit'])
+    def test_start(self, mock_input):
         try:
             self.interpreter.start()
         except Exception as e:
