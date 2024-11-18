@@ -1,0 +1,14 @@
+{
+  "name": "agent-a",
+  "version": "1.0.0",
+  "description": "A comprehensive AI agent combining features from OpenInterpreter, Agent Zero, and AgentK.",
+  "main": "src/agent_a/core.py",
+  "scripts": {
+    "build": "echo 'Building the project...' && exit 0",
+    "test": "pytest",
+    "start": "PYTHONPATH=src python src/agent_a/core.py"
+  },
+  "author": "ShivamKR12",
+  "license": "MIT",
+  "dependencies": {}
+}
