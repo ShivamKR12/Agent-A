@@ -15,3 +15,7 @@ class Modularity:
     def remove_module(self, module):
         if module in self.modules:
             self.modules.remove(module)
+            
+    def cleanup(self):
+        """Cleanup method to properly shutdown modularity"""
+        self.modules.clear()
