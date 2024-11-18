@@ -6,7 +6,7 @@
   "scripts": {
     "build": "echo 'Building the project...' && exit 0",
     "test": "pytest",
-    "start": "PYTHONPATH=$(pwd)/src python src/agent_a/core.py"
+    "start": "PYTHONPATH=src python src/agent_a/core.py"
   },
   "author": "ShivamKR12",
   "license": "MIT",
