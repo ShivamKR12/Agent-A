@@ -1,133 +1,163 @@
 import asyncio
 import json
-from typing import Generator
+from typing import Any, Dict, List
 
-from .utils.lazy_import import lazy_import
+from fastapi import FastAPI, Header, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from uvicorn import Config, Server
 
-uvicorn = lazy_import("uvicorn")
-fastapi = lazy_import("fastapi")
+
+class Settings(BaseModel):
+    auto_run: bool
+    custom_instructions: str
+    model: str
 
 
-def server(interpreter, host="0.0.0.0", port=8000):
-    FastAPI, Request, Response, WebSocket = (
-        fastapi.FastAPI,
-        fastapi.Request,
-        fastapi.Response,
-        fastapi.WebSocket,
-    )
-    PlainTextResponse = fastapi.responses.PlainTextResponse
+class AsyncInterpreter:
+    def __init__(self, interpreter):
+        self.interpreter = interpreter
 
-    app = FastAPI()
-
-    @app.post("/chat")
-    async def stream_endpoint(request: Request) -> Response:
-        async def event_stream() -> Generator[str, None, None]:
-            data = await request.json()
-            for response in interpreter.chat(message=data["message"], stream=True):
-                yield response
-
-        return Response(event_stream(), media_type="text/event-stream")
-
-    @app.get("/test")
-    async def test_ui():
-        return PlainTextResponse(
-            """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Chat</title>
-            </head>
-            <body>
-                <form action="" onsubmit="sendMessage(event)">
-                    <textarea id="messageInput" rows="10" cols="50" autocomplete="off"></textarea>
-                    <button>Send</button>
-                </form>
-                <div id="messages"></div>
-                <script>
-                    var ws = new WebSocket("ws://localhost:8000/");
-                    var lastMessageElement = null;
-                    ws.onmessage = function(event) {
-                        if (lastMessageElement == null) {
-                            lastMessageElement = document.createElement('p');
-                            document.getElementById('messages').appendChild(lastMessageElement);
-                        }
-                        lastMessageElement.innerHTML += event.data;
-                    };
-                    function sendMessage(event) {
-                        event.preventDefault();
-                        var input = document.getElementById("messageInput");
-                        var message = input.value;
-                        if (message.startsWith('{') && message.endsWith('}')) {
-                            message = JSON.stringify(JSON.parse(message));
-                        }
-                        ws.send(message);
-                        var userMessageElement = document.createElement('p');
-                        userMessageElement.innerHTML = '<b>' + input.value + '</b><br>';
-                        document.getElementById('messages').appendChild(userMessageElement);
-                        lastMessageElement = document.createElement('p');
-                        document.getElementById('messages').appendChild(lastMessageElement);
-                        input.value = '';
-                    }
-                </script>
-            </body>
-            </html>
-            """,
-            media_type="text/html",
+        self._input_queue = asyncio.Queue()  # Queue that .input will shove things into
+        self._output_queue = asyncio.Queue()  # Queue to put output chunks into
+        self._last_lmc_start_flag = None  # Unix time of last LMC start flag received
+        self._in_keyboard_write_block = (
+            False  # Tracks whether interpreter is trying to use the keyboard
         )
 
-    @app.websocket("/")
-    async def i_test(websocket: WebSocket):
-        await websocket.accept()
-        while True:
-            data = await websocket.receive_text()
-            while data.strip().lower() != "stop":  # Stop command
-                task = asyncio.create_task(websocket.receive_text())
+    async def _add_to_queue(self, queue, item):
+        await queue.put(item)
 
-                try:
-                    data_dict = json.loads(data)
-                    if set(data_dict.keys()) == {"role", "content", "type"} or set(
-                        data_dict.keys()
-                    ) == {"role", "content", "type", "format"}:
-                        data = data_dict
-                except json.JSONDecodeError:
+    async def clear_queue(self, queue):
+        while not queue.empty():
+            await queue.get()
+
+    async def clear_input_queue(self):
+        await self.clear_queue(self._input_queue)
+
+    async def clear_output_queue(self):
+        await self.clear_queue(self._output_queue)
+
+    async def input(self, chunk):
+        """
+        Expects a chunk in streaming LMC format.
+        """
+        if isinstance(chunk, bytes):
+            pass
+        else:
+            try:
+                chunk = json.loads(chunk)
+            except:
+                pass
+
+            if "start" in chunk:
+                self._last_lmc_start_flag = time.time()
+                self.interpreter.computer.terminate()
+            elif "end" in chunk:
+                asyncio.create_task(self.run())
+            else:
+                await self._add_to_queue(self._input_queue, chunk)
+
+    def add_to_output_queue_sync(self, chunk):
+        """
+        Synchronous function to add a chunk to the output queue.
+        """
+        asyncio.create_task(self._add_to_queue(self._output_queue, chunk))
+
+    async def run(self):
+        """
+        Runs OI on the audio bytes submitted to the input. Will add streaming LMC chunks to the _output_queue.
+        """
+        input_queue = list(self._input_queue._queue)
+        message = [i for i in input_queue if i["type"] == "message"][0]["content"]
+
+        def generate(message):
+            last_lmc_start_flag = self._last_lmc_start_flag
+            print("passing this in:", message)
+            for chunk in self.interpreter.chat(message, display=False, stream=True):
+                if self._last_lmc_start_flag != last_lmc_start_flag:
+                    break
+
+                content = chunk.get("content")
+
+                if chunk.get("type") == "message":
+                    self.add_to_output_queue_sync(
+                        chunk.copy()
+                    )
+                    if content:
+                        yield content
+
+                elif chunk.get("type") == "code":
                     pass
 
-                for response in interpreter.chat(
-                    message=data, stream=True, display=False
-                ):
-                    if task.done():
-                        data = task.result()  # Get the new message
-                        break  # Break the loop and start processing the new message
-                    if (
-                        response.get("type") == "message"
-                        and response["role"] == "assistant"
-                        and "content" in response
-                    ):
-                        await websocket.send_text(response["content"])
-                        await asyncio.sleep(0.01)  # Add a small delay
-                    if (
-                        response.get("type") == "message"
-                        and response["role"] == "assistant"
-                        and response.get("end") == True
-                    ):
-                        await websocket.send_text("\n")
-                        await asyncio.sleep(0.01)  # Add a small delay
-                if not task.done():
-                    data = await task  # Wait for the next message if it hasn't arrived yet
+            self.add_to_output_queue_sync(
+                {"role": "server", "type": "completion", "content": "DONE"}
+            )
 
-    print(
-        "\nOpening a simple `interpreter.chat(data)` POST endpoint at http://localhost:8000/chat."
+        for _ in generate(message):
+            pass
+
+    async def output(self):
+        return await self._output_queue.get()
+
+
+def server(interpreter, port=8000):  # Default port is 8000 if not specified
+    async_interpreter = AsyncInterpreter(interpreter)
+
+    app = FastAPI()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+        allow_headers=["*"],  # Allow all headers
     )
-    print(
-        "Opening an `i.protocol` compatible WebSocket endpoint at http://localhost:8000/."
-    )
-    print("\nVisit http://localhost:8000/test to test the WebSocket endpoint.\n")
 
-    import socket
+    @app.post("/settings")
+    async def settings(payload: Dict[str, Any]):
+        for key, value in payload.items():
+            print("Updating interpreter settings with the following:")
+            print(key, value)
+            if key == "llm" and isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    setattr(async_interpreter.interpreter, sub_key, sub_value)
+            else:
+                setattr(async_interpreter.interpreter, key, value)
 
-    hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
-    local_url = f"http://{local_ip}:8000"
-    print(f"Local URL: {local_url}\n")
+        return {"status": "success"}
 
-    uvicorn.run(app, host=host, port=port)
+    @app.websocket("/")
+    async def websocket_endpoint(websocket: WebSocket):
+        await websocket.accept()
+        try:
+
+            async def receive_input():
+                while True:
+                    data = await websocket.receive()
+                    print(data)
+                    if isinstance(data, bytes):
+                        await async_interpreter.input(data)
+                    elif "text" in data:
+                        await async_interpreter.input(data["text"])
+                    elif data == {"type": "websocket.disconnect", "code": 1000}:
+                        print("Websocket disconnected with code 1000.")
+                        break
+
+            async def send_output():
+                while True:
+                    output = await async_interpreter.output()
+                    if isinstance(output, bytes):
+                        pass
+                    elif isinstance(output, dict):
+                        await websocket.send_text(json.dumps(output))
+
+            await asyncio.gather(receive_input(), send_output())
+        except Exception as e:
+            print(f"WebSocket connection closed with exception: {e}")
+            traceback.print_exc()
+        finally:
+            await websocket.close()
+
+    config = Config(app, host="0.0.0.0", port=port)
+    interpreter.uvicorn_server = Server(config)
+    interpreter.uvicorn_server.run()

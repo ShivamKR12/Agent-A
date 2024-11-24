@@ -21,6 +21,8 @@ except ImportError:
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 
+from server import server
+
 # Define system messages
 SYSTEM_MESSAGE = f"""
 You are a fast, efficient terminal assistant. Your task is to:
@@ -468,3 +470,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    server(interpreter=None, port=8000)
