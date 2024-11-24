@@ -21,7 +21,7 @@ except ImportError:
 os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 
-from server import server
+from server import server, AsyncInterpreter
 
 # Define system messages
 SYSTEM_MESSAGE = f"""
