@@ -32,5 +32,15 @@ class TestDecisionMaker(unittest.TestCase):
         self.decision_maker.stop()
         self.assertFalse(self.decision_maker.running)
 
+    def test_command_handler_support(self):
+        self.command_executed = False
+
+        def command_handler(command):
+            self.command_executed = True
+
+        self.decision_maker.set_command_handler(command_handler)
+        self.decision_maker.handle_command("test_command")
+        self.assertTrue(self.command_executed)
+
 if __name__ == '__main__':
     unittest.main()
