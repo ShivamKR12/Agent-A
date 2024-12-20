@@ -6,15 +6,21 @@ from typing import Optional, Dict, Any
 from .interpreter import InteractiveInterpreter
 from .decision_maker import DecisionMaker
 from .modularity import Modularity, Module
+from .config import AgentConfig
+from .state import AgentState
+from .api import APIServer
 
 class AgentA:
-    def __init__(self):
+    def __init__(self, config_path: str = None):
+        self.config = AgentConfig.from_yaml(config_path or "config.yaml")
         self._setup_logging()
+        self.state = AgentState(self.config)
         self.running = False
         self.interpreter: Optional[InteractiveInterpreter] = None
         self.decision_maker: Optional[DecisionMaker] = None
         self.modularity: Optional[Modularity] = None
-        
+        self.api_server: Optional[APIServer] = None
+
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -36,10 +42,20 @@ class AgentA:
     def initialize_components(self):
         """Initialize all components with proper integration"""
         try:
-            # Initialize base components
-            self.interpreter = InteractiveInterpreter(self)
-            self.decision_maker = DecisionMaker()
-            self.modularity = Modularity()
+            # Initialize base components with config
+            self.interpreter = InteractiveInterpreter(
+                prompt=self.config.interpreter_prompt
+            )
+            self.decision_maker = DecisionMaker(
+                max_workers=self.config.max_workers
+            )
+            self.modularity = Modularity(
+                auto_reload=self.config.module_auto_reload
+            )
+            
+            # Initialize API server if enabled
+            if self.config.enable_api_server:
+                self.api_server = APIServer(self)
             
             # Register core modules
             self._register_core_modules()
@@ -86,6 +102,12 @@ class AgentA:
     def _handle_command(self, command: str):
         """Handle commands from the interpreter"""
         try:
+            # Add command to history
+            self.state.command_history.add_command(command, {
+                "timestamp": datetime.utcnow().isoformat(),
+                "user": "ShivamKR12"
+            })
+            
             # Create a unique task ID
             task_id = f"cmd_{uuid4().hex[:8]}"
             

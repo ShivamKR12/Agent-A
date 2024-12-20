@@ -57,6 +57,38 @@ agent.process_command("Command Here")
 agent.add_extension("PluginName")
 ```
 
+## Configuration Management
+
+The agent uses a YAML configuration file to manage settings. Create a `config.yaml` file in the root directory with the following structure:
+
+```yaml
+max_workers: 4
+task_timeout: 60
+log_level: "INFO"
+command_history_size: 1000
+module_auto_reload: true
+interpreter_prompt: ">>> "
+data_dir: "./data"
+log_dir: "./logs"
+module_dir: "./modules"
+enable_api_server: false
+api_port: 8080
+api_host: "localhost"
+```
+
+## API Server
+
+If the API server is enabled in the configuration, you can interact with the agent using HTTP requests. The API server provides the following endpoints:
+
+- `POST /command`: Execute a command.
+- `GET /status`: Get the status of the agent.
+
+Example usage with `curl`:
+
+```sh
+curl -X POST "http://localhost:8080/command" -H "Content-Type: application/json" -d '{"command": "Translate: Hello World"}'
+```
+
 ## Contribution Guidelines
 
 We welcome contributions! Please follow these steps:
