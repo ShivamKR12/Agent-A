@@ -1,253 +1,100 @@
 import logging
-import signal
-import sys
-import time
-from typing import Optional, Dict, Any
-from .interpreter import InteractiveInterpreter
-from .decision_maker import DecisionMaker
-from .modularity import Modularity, Module
-from .config import AgentConfig
-from .state import AgentState
-from .api import APIServer
+from agent_a.open_interpreter.interpreter import InteractiveInterpreter
+from agent_a.agent_zero.decision_maker import DecisionMaker
+from agent_a.agent_k.modularity import Modularity
 
 class AgentA:
-    def __init__(self, config_path: str = None):
-        self.config = AgentConfig.from_yaml(config_path or "config.yaml")
-        self._setup_logging()
-        self.state = AgentState(self.config)
-        self.running = False
-        self.interpreter: Optional[InteractiveInterpreter] = None
-        self.decision_maker: Optional[DecisionMaker] = None
-        self.modularity: Optional[Modularity] = None
-        self.api_server: Optional[APIServer] = None
-
-        # Setup signal handlers
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-
-    def _setup_logging(self):
-        """Setup logging configuration"""
+    def __init__(self):
+        self.interpreter = InteractiveInterpreter(self)
+        self.decision_maker = DecisionMaker()
+        self.modularity = Modularity()
         self.logger = logging.getLogger(__name__)
-        self.logger.handlers.clear()
         self.logger.setLevel(logging.DEBUG)
-        
         handler = logging.StreamHandler()
         handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
-    def initialize_components(self):
-        """Initialize all components with proper integration"""
+    def run(self):
         try:
-            # Initialize base components with config
-            self.interpreter = InteractiveInterpreter(
-                prompt=self.config.interpreter_prompt
-            )
-            self.decision_maker = DecisionMaker(
-                max_workers=self.config.max_workers
-            )
-            self.modularity = Modularity(
-                auto_reload=self.config.module_auto_reload
-            )
-            
-            # Initialize API server if enabled
-            if self.config.enable_api_server:
-                self.api_server = APIServer(self)
-            
-            # Register core modules
-            self._register_core_modules()
-            
-            # Set up interpreter command handling
-            self.interpreter.set_command_handler(self._handle_command)
-            
-            self.running = True
-            self.logger.info("All components initialized successfully")
-            
-        except Exception as e:
-            self.logger.error(f"Failed to initialize components: {e}")
-            raise
-
-    def _register_core_modules(self):
-        """Register the core functionality modules"""
-        try:
-            # Command Processing Module
-            self.modularity.register_module(Module(
-                name="command_processor",
-                execute=self._process_command_module,
-                provides=["command_processing"]
-            ))
-            
-            # Context Management Module
-            self.modularity.register_module(Module(
-                name="context_manager",
-                execute=self._manage_context_module,
-                provides=["context_management"],
-                dependencies=["command_processing"]
-            ))
-            
-            # Response Generation Module
-            self.modularity.register_module(Module(
-                name="response_generator",
-                execute=self._generate_response_module,
-                dependencies=["context_management"]
-            ))
-            
-        except Exception as e:
-            self.logger.error(f"Failed to register core modules: {e}")
-            raise
-
-    def _handle_command(self, command: str):
-        """Handle commands from the interpreter"""
-        try:
-            # Add command to history
-            self.state.command_history.add_command(command, {
-                "timestamp": datetime.utcnow().isoformat(),
-                "user": "ShivamKR12"
-            })
-            
-            # Create a unique task ID
-            task_id = f"cmd_{uuid4().hex[:8]}"
-            
-            # Create command processing task
-            task = Task(
-                id=task_id,
-                callable=self._process_command,
-                priority=TaskPriority.HIGH,
-                context={
-                    "command": command,
-                    "timestamp": time.time(),
-                    "user": "ShivamKR12"  # Using the current user's login
-                },
-                timeout=30
-            )
-            
-            # Add task to decision maker with callback
-            self.decision_maker.add_task(task, callback=self._command_completed)
-            
-        except Exception as e:
-            self.logger.error(f"Error handling command: {e}")
-
-    def _process_command(self, context: dict) -> dict:
-        """Process a command through the module system"""
-        try:
-            # Update shared context
-            self.modularity.context.set("current_command", context)
-            
-            # Execute module chain
+            self.logger.info("Starting Agent-A")
+            self.interpreter.start()
+            self.logger.info("Interpreter started")
+            self.decision_maker.start()
+            self.logger.info("Decision maker started executing tasks")
+            # Add an example module
+            self.modularity.add_module(self.example_module)
             self.modularity.extend()
-            
-            # Get response from context
-            response = self.modularity.context.get("command_response")
-            
-            return {
-                "status": "success",
-                "response": response,
-                "command_context": context
-            }
-            
+            self.logger.info("Modules extended")
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "command_context": context
-            }
+            self.logger.error(f"An error occurred: {e}")
+            raise
 
-    def _command_completed(self, result):
-        """Handle command completion and response"""
-        if result.success:
-            response = result.result.get("response", "Command processed successfully")
-            print(f"\n{response}\n>>> ", end="", flush=True)
-        else:
-            print(f"\nError: {result.error}\n>>> ", end="", flush=True)
+    def example_module(self):
+        print("Example module executed")
 
     def _process_command_module(self, context):
         """Core module for command processing"""
-        current_command = context.get("current_command")
-        if current_command:
-            # Process command logic here
-            context.set("processed_command", {
-                "parsed": True,
-                "timestamp": time.time(),
-                "command_type": "user_input"
-            })
-
-    def _manage_context_module(self, context):
-        """Core module for context management"""
-            processed_command = context.get("processed_command")
-            if processed_command:
-                # Update context with additional information
-                context.set("command_context", {
-                    "history": [],  # Add command history
-                    "environment": {
-                        "date": "2024-12-20",
-                        "time": "06:53:16",
-                        "user": "ShivamKR12"
-                    }
-                })
-
-    def _generate_response_module(self, context):
-        """Core module for response generation"""
-        command_context = context.get("command_context")
-        if command_context:
-            # Generate appropriate response
-            context.set("command_response", "Command processed successfully")
-
-    def run(self):
-        """Main execution loop with integrated component management"""
         try:
-            self.logger.info("Starting Agent-A")
-            self.initialize_components()
-            
-            if not all([self.interpreter, self.decision_maker, self.modularity]):
-                raise RuntimeError("Components not properly initialized")
-
-            # Start decision maker
-            self.decision_maker.start()
-            
-            # Start interpreter (non-blocking)
-            self.interpreter.start_async()
-            
-            # Main loop
-            while self.running:
-                time.sleep(0.1)  # Prevent CPU spinning
+            current_command = context.get("current_command")
+            if not current_command:
+                return
                 
-        except Exception as e:
-            self.logger.error(f"Critical error during execution: {e}")
-            self.cleanup()
-            raise
-        finally:
-            self.cleanup()
+            # Parse command for code blocks
+            code_blocks = self._extract_code_blocks(current_command["command"])
+            
+            if code_blocks:
+                # Process code blocks
+                results = []
+                for block in code_blocks:
+                    result = self.code_executor.execute_code(
+                        block["code"],
+                        block["language"],
+                        current_command
+                    )
+                    results.append(result)
+                context.set("code_execution_results", results)
+            else:
+                # Process as natural language command
+                self._process_natural_language(current_command, context)
 
-    def cleanup(self):
-        """Cleanup all components gracefully"""
-        self.logger.info("Shutting down Agent-A")
-        self.running = False
+        except Exception as e:
+            self.logger.error(f"Error in command processing: {e}")
+            context.set("processing_error", str(e))
+
+    def _extract_code_blocks(self, text):
+        """Extract code blocks from text using markdown-style formatting"""
+        code_blocks = []
+        pattern = r"```(\w+)\n(.*?)```"
+        matches = re.finditer(pattern, text, re.DOTALL)
         
-        try:
-            # Stop components in reverse order
-            if self.interpreter:
-                self.interpreter.stop()
-            if self.decision_maker:
-                self.decision_maker.stop()
-            if self.modularity:
-                self.modularity.cleanup()
-                
-        except Exception as e:
-            self.logger.error(f"Error during cleanup: {e}")
+        for match in matches:
+            language = match.group(1).lower()
+            code = match.group(2).strip()
+            code_blocks.append({
+                "language": language,
+                "code": code
+            })
+            
+        return code_blocks
 
-    def _signal_handler(self, signum, frame):
-        """Handle system signals gracefully"""
-        self.logger.info(f"Received signal {signum}")
-        self.cleanup()
-        sys.exit(0)
+    def _process_natural_language(self, command, context):
+        """Process natural language commands using AI models"""
+        try:
+            # Get AI response
+            ai_response = self._get_ai_response(command["command"])
+            
+            # Extract potential code or actions
+            actions = self._extract_actions(ai_response)
+            
+            context.set("ai_response", ai_response)
+            context.set("extracted_actions", actions)
+            
+        except Exception as e:
+            self.logger.error(f"Error processing natural language: {e}")
+            context.set("nl_processing_error", str(e))
 
 if __name__ == "__main__":
     agent = AgentA()
-    try:
-        agent.run()
-    except Exception as e:
-        logging.error(f"Fatal error: {e}")
-        sys.exit(1)
+    agent.run()
