@@ -67,5 +67,21 @@ class TestModularity(unittest.TestCase):
         self.modularity.register_module(moduleB)
         self.modularity.extend()
 
+    def test_context_handling(self):
+        def sample_module(context):
+            context.set("key", "value")
+        module = Module(name="sample", execute=sample_module)
+        self.modularity.register_module(module)
+        self.modularity.extend()
+        self.assertEqual(self.modularity.context.get("key"), "value")
+
+    def test_error_handling(self):
+        def failing_module(context):
+            raise ValueError("Module failed")
+        module = Module(name="failing", execute=failing_module)
+        self.modularity.register_module(module)
+        with self.assertRaises(ValueError):
+            self.modularity.extend()
+
 if __name__ == '__main__':
     unittest.main()
