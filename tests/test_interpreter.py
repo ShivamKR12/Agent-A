@@ -56,5 +56,74 @@ class TestInteractiveInterpreter(unittest.TestCase):
         self.interpreter.add_module(sample_module)
         self.assertIn("sample_module", self.agent.modularity.modules)
 
+    def test_handle_built_in_command(self):
+        context = {}
+        response = self.interpreter._handle_built_in_command("/help", context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("Available Commands", response["response"])
+
+    def test_cmd_help(self):
+        context = {}
+        response = self.interpreter._cmd_help([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("Available Commands", response["response"])
+
+    def test_cmd_exit(self):
+        context = {}
+        response = self.interpreter._cmd_exit([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("Exiting Agent-A...", response["response"])
+
+    def test_cmd_clear(self):
+        context = {}
+        with patch('os.system') as mock_system:
+            response = self.interpreter._cmd_clear([], context)
+            mock_system.assert_called_once()
+            self.assertEqual(response["status"], "success")
+
+    def test_cmd_history(self):
+        context = {}
+        self.agent.state.command_history.add_command("test_command", context)
+        response = self.interpreter._cmd_history([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("test_command", response["response"])
+
+    def test_cmd_status(self):
+        context = {}
+        response = self.interpreter._cmd_status([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("running", response["response"])
+
+    def test_cmd_capabilities(self):
+        context = {}
+        self.agent.capabilities = MagicMock()
+        self.agent.capabilities.capabilities = {"capability1": "description"}
+        response = self.interpreter._cmd_capabilities([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("capability1", response["response"])
+
+    def test_cmd_execute(self):
+        context = {}
+        self.agent.code_executor = MagicMock()
+        self.agent.code_executor.execute_code.return_value = {"success": True, "output": "result"}
+        response = self.interpreter._cmd_execute(["python", "print('Hello')"], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("result", response["response"])
+
+    def test_cmd_plan(self):
+        context = {}
+        self.agent.planning_system = MagicMock()
+        self.agent.planning_system.current_plan = {"plan": "details"}
+        response = self.interpreter._cmd_plan([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("plan", response["response"])
+
+    def test_cmd_modules(self):
+        context = {}
+        self.agent.modularity.modules = {"module1": MagicMock(provides=["feature"], dependencies=[])}
+        response = self.interpreter._cmd_modules([], context)
+        self.assertEqual(response["status"], "success")
+        self.assertIn("module1", response["response"])
+
 if __name__ == '__main__':
     unittest.main()
