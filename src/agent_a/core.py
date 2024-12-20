@@ -3,9 +3,9 @@ import signal
 import sys
 import time
 from typing import Optional, Dict, Any
-from agent_a.open_interpreter.interpreter import InteractiveInterpreter
-from agent_a.agent_zero.decision_maker import DecisionMaker
-from agent_a.agent_k.modularity import Modularity, Module
+from .interpreter import InteractiveInterpreter
+from .decision_maker import DecisionMaker
+from .modularity import Modularity, Module
 
 class AgentA:
     def __init__(self):
@@ -87,46 +87,17 @@ class AgentA:
             raise
 
     def run(self):
-        """Main execution loop"""
-        try:
-            self.logger.info("Starting Agent-A")
-            self.initialize_components()
-            
-            if not all([self.interpreter, self.decision_maker, self.modularity]):
-                raise RuntimeError("Components not properly initialized")
-
-            # Start decision maker in background
-            self.decision_maker.start()
-            
-            # Register interpreter commands as decision maker tasks
-            self.interpreter.set_command_handler(self._command_handler)
-            
-            # Start interpreter (non-blocking)
-            self.interpreter.start_async()
-            
-            # Main loop
-            self.running = True
-            while self.running:
-                time.sleep(0.1)  # Prevent CPU spinning
-                
-        except Exception as e:
-            self.logger.error(f"Critical error during execution: {e}")
-            self.cleanup()
-            raise
-        finally:
-            self.cleanup()
+        self.initialize_components()
+        self.interpreter.set_command_handler(self._command_handler)
+        self.interpreter.start_async()
+        self.decision_maker.start()
 
     def stop(self):
-        """Stop all components"""
-        if self.interpreter:
-            self.interpreter.stop()
-        if self.decision_maker:
-            self.decision_maker.stop()
-        if self.modularity:
-            self.modularity.cleanup()
+        self.interpreter.stop()
+        self.decision_maker.stop()
+        self.modularity.cleanup()
 
     def _signal_handler(self, signum, frame):
-        """Handle system signals for graceful shutdown"""
         self.logger.info(f"Received signal {signum}, stopping AgentA...")
         self.stop()
         sys.exit(0)

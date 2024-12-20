@@ -71,10 +71,10 @@ class DecisionMaker:
         task = Task(
             id=task_id,
             callable=task_callable,
-            status=TaskStatus.PENDING,
-            dependencies=dependencies or [],
-            priority=priority,
-            context=context or {}
+            status: TaskStatus.PENDING,
+            dependencies: dependencies or [],
+            priority: priority,
+            context: context or {}
         )
 
         try:
