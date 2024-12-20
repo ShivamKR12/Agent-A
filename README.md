@@ -46,6 +46,17 @@ Ensure robust error handling and modular design to facilitate debugging and futu
    python src/agent_a/core.py
    ```
 
+## Unified Agent
+
+Import the `UnifiedAgent` to access all functionalities:
+```python
+from agent_a import UnifiedAgent
+
+agent = UnifiedAgent()
+agent.process_command("Command Here")
+agent.add_extension("PluginName")
+```
+
 ## Contribution Guidelines
 
 We welcome contributions! Please follow these steps:
